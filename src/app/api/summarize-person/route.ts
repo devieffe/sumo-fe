@@ -2,11 +2,14 @@ const ipRequests = new Map<string, { count: number; timestamp: number }>();
 const MAX_REQUESTS = 10;
 const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+interface SerpResult {
+  link: string;
+}
+
 export async function POST(req: Request): Promise<Response> {
   try {
     // --- RATE LIMITING ---
-    const ip =
-      req.headers.get('x-forwarded-for') || 'local';
+    const ip = req.headers.get('x-forwarded-for') || 'local';
     const now = Date.now();
     const existing = ipRequests.get(ip);
 
@@ -28,7 +31,7 @@ export async function POST(req: Request): Promise<Response> {
       ipRequests.set(ip, { count: 1, timestamp: now });
     }
 
-    // --- REQUEST PARSING ---
+    // --- PARSE REQUEST ---
     const { topic } = await req.json();
     if (!topic || topic.trim() === '') {
       return new Response(JSON.stringify({ error: 'Missing topic' }), {
@@ -40,7 +43,7 @@ export async function POST(req: Request): Promise<Response> {
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
-    // --- GET LINKS FROM SERPAPI ---
+    // --- FETCH FROM SERPAPI ---
     const serpRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${serpApiKey}`
     );
@@ -55,19 +58,19 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const serpData = await serpRes.json();
-    const links = (serpData.organic_results || [])
+    const links = (serpData.organic_results as SerpResult[] || [])
       .slice(0, 20)
-      .map((r: any) => r.link)
+      .map((r) => r.link)
       .filter(Boolean);
 
-    if (!links.length) {
+    if (links.length === 0) {
       return new Response(JSON.stringify({ error: 'No search results found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // --- BUILD PROMPT FOR OPENAI ---
+    // --- PROMPT OPENAI ---
     const prompt = `
 The user searched for "${topic}". This name may refer to one or more real people.
 
@@ -84,7 +87,6 @@ ${links.join('\n')}
 Do not mention that multiple people may share the same name. Just provide a focused summary of the selected person.
 `;
 
-    // --- CALL OPENAI ---
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
