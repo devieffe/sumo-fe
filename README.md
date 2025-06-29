@@ -13,7 +13,7 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 - ⚡️ **Next.js 15 App router** with API routes and `app/` directory.
 - 🧼 Fully type-safe and ESLint-compliant (`@typescript-eslint/no-explicit-any` safe).
 
-## Tech Stack
+## Tech stack
 
 | Technology    | Purpose                               |
 |---------------|----------------------------------------|
@@ -24,7 +24,7 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 | **TailwindCSS**| Styling for UI                        |
 
 
-## Live Demo
+## Live demo
 
 [sumo-name.vercel.app]('sumo-name.vercel.app')
 
