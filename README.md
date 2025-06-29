@@ -32,3 +32,7 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 [sumo-name.vercel.app]('sumo-name.vercel.app')
 
+## Why sumo
+
+Traditional sumo is often complex and time-consuming. 'Sumo' component aims to simplify the search for names. It transforms that search into a straightforward, logical experience avoiding the common missteps and confusion that modern web search engines frequently introduce. Existential user troubles even.
+
