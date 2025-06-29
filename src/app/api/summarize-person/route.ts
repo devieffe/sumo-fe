@@ -1,9 +1,35 @@
-
+const ipRequests = new Map<string, { count: number; timestamp: number }>();
+const MAX_REQUESTS = 10;
+const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    const { topic } = await req.json();
+    // --- RATE LIMITING ---
+    const ip =
+      req.headers.get('x-forwarded-for') || 'local';
+    const now = Date.now();
+    const existing = ipRequests.get(ip);
 
+    if (existing) {
+      const timeDiff = now - existing.timestamp;
+      if (timeDiff < WINDOW_MS) {
+        if (existing.count >= MAX_REQUESTS) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 2 hours.' }),
+            { status: 429, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        existing.count++;
+        ipRequests.set(ip, existing);
+      } else {
+        ipRequests.set(ip, { count: 1, timestamp: now });
+      }
+    } else {
+      ipRequests.set(ip, { count: 1, timestamp: now });
+    }
+
+    // --- REQUEST PARSING ---
+    const { topic } = await req.json();
     if (!topic || topic.trim() === '') {
       return new Response(JSON.stringify({ error: 'Missing topic' }), {
         status: 400,
@@ -11,12 +37,10 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    console.log('Received topic:', topic);
-
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
-    // 1. Get top 20 links from SerpAPI
+    // --- GET LINKS FROM SERPAPI ---
     const serpRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${serpApiKey}`
     );
@@ -43,24 +67,24 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // 2. Build prompt for OpenAI
-const prompt = `
+    // --- BUILD PROMPT FOR OPENAI ---
+    const prompt = `
 The user searched for "${topic}". This name may refer to one or more real people.
 
-1. If it's **not a real person**, respond only: "Not a real person."
-2. If it's **a common name with multiple people**, pick **only one** notable person to write about, based on:
-   - Relevance (e.g. most known in search results),
-   - Country of origin or association,
+1. If it's not a real person, respond only: "Not a real person."
+2. If it's a common name with multiple people, pick only one notable individual based on:
+   - Relevance (most known in results),
+   - Country of origin,
    - Profession and uniqueness.
 
-Write a single 200-word summary about **that one real person**, using these links:
+Write a 200-word summary about that one real person, using these links:
 
 ${links.join('\n')}
 
-Avoid repeating that many people share the same name — instead, focus on summarizing the **most relevant individual** clearly.
+Do not mention that multiple people may share the same name. Just provide a focused summary of the selected person.
 `;
 
-    // 3. Request summary from OpenAI
+    // --- CALL OPENAI ---
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -96,14 +120,13 @@ Avoid repeating that many people share the same name — instead, focus on summa
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err) {
-  const message =
-    err instanceof Error ? err.message : 'Unknown error';
-  console.error('API error:', err);
 
-  return new Response(JSON.stringify({ error: message }), {
-    status: 500,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('API error:', err);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
