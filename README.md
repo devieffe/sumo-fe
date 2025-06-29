@@ -1,5 +1,9 @@
 # sumo-fe
 
+<p align="center">
+  <img src="[./public/demo.png](https://raw.githubusercontent.com/devieffe/sumo-fe/refs/heads/main/sumo-emoji.png)" alt="Sumo!" />
+</p>
+
 ## Person subject summary react/next.js component  
 
 An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpAPI** that generates concise 200-word biographies of real people based on live search results — with built-in IP-based rate limiting.
