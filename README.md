@@ -10,12 +10,12 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 ## Features
 
-- 🔍 **Live web search**: Uses SerpAPI to gather top links for the query.
-- 🤖 **Smart summarization**: Uses OpenAI’s GPT model to analyze and summarize the most relevant subject.
-- 🧠 **Name disambiguation**: If the name refers to multiple individuals, the app selects one based on most common parameters.
-- 🧱 **Rate limiting**: Restricts usage to a few requests per session.
-- ⚡️ **Next.js 15 App router** with API routes and `app/` directory.
-- 🧼 Fully type-safe and ESLint-compliant (`@typescript-eslint/no-explicit-any` safe).
+- **Live web search**: Uses SerpAPI to gather top links for the query.
+- **Smart summarization**: Uses OpenAI’s GPT model to analyze and summarize the most relevant subject.
+- **Name disambiguation**: If the name refers to multiple individuals, the app selects one based on most common parameters.
+- **Rate limiting**: Restricts usage to a few requests per session.
+- **Next.js 15 App router** with API routes and `app/` directory.
+- Fully type-safe and ESLint-compliant (`@typescript-eslint/no-explicit-any` safe).
 
 ## Tech stack
 
