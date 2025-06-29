@@ -96,11 +96,14 @@ Avoid repeating that many people share the same name — instead, focus on summa
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('API error:', err);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  } catch (err) {
+  const message =
+    err instanceof Error ? err.message : 'Unknown error';
+  console.error('API error:', err);
+
+  return new Response(JSON.stringify({ error: message }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json' },
+  });
   }
 }
