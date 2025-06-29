@@ -4,8 +4,6 @@
 
 An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpAPI** that generates concise 200-word biographies of real people based on live search results — with built-in IP-based rate limiting.
 
----
-
 ## ✨ Features
 
 - 🔍 **Live web search**: Uses [SerpAPI](https://serpapi.com/) to gather top links for the query.
@@ -14,8 +12,6 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 - 🧱 **Rate limiting**: Restricts usage to a few requests per session.
 - ⚡️ **Next.js 15 App router** with API routes and `app/` directory.
 - 🧼 Fully type-safe and ESLint-compliant (`@typescript-eslint/no-explicit-any` safe).
-
----
 
 ## 🛠 Tech Stack
 
@@ -27,10 +23,8 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 | **TypeScript**| Type safety across app and backend     |
 | **TailwindCSS**| Styling for UI                        |
 
----
 
 ## 🚀 Live Demo
 
 sumo-name.vercel.app
 
----
