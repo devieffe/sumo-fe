@@ -62,6 +62,7 @@ export default function PersonSummary() {
         placeholder="Enter a name (e.g., Ada Lovelace)"
         className="border rounded p-2 w-full mb-3"
         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+        maxLength={35}
       />
 
       <button
