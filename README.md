@@ -6,7 +6,7 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 ## Features
 
-- 🔍 **Live web search**: Uses [SerpAPI](https://serpapi.com/) to gather top links for the query.
+- 🔍 **Live web search**: Uses SerpAPI to gather top links for the query.
 - 🤖 **Smart summarization**: Uses OpenAI’s GPT model to analyze and summarize the most relevant subject.
 - 🧠 **Name disambiguation**: If the name refers to multiple individuals, the app selects one based on most common parameters.
 - 🧱 **Rate limiting**: Restricts usage to a few requests per session.
@@ -26,5 +26,5 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 ## Live Demo
 
-sumo-name.vercel.app
+sumo-name.vercel.app(sumo-name.vercel.app)
 
