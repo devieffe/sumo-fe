@@ -30,7 +30,7 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 ## Live demo
 
-[sumo-name.vercel.app]('sumo-name.vercel.app')
+[sumo-name.vercel.app](sumo-name.vercel.app)
 
 ## Why sumo
 
