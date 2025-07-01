@@ -1,7 +1,7 @@
 # sumo-fe
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/devieffe/sumo-fe/refs/heads/main/sumo-emoji-m.png" alt="Sumo!" width="424" />
+  <img src="https://raw.githubusercontent.com/devieffe/sumo-fe/refs/heads/main/sumoist-emoji.png" alt="Sumo!" width="360" />
 </p>
 
 ## Person subject summary react/next.js component  
