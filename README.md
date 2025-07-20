@@ -17,6 +17,8 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 - **Next.js 15 App router** with API routes and `app/` directory.
 - Fully type-safe and ESLint-compliant (`@typescript-eslint/no-explicit-any` safe).
 
+---
+
 ## Tech stack
 
 | Technology    | Purpose                               |
@@ -27,10 +29,13 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 | **TypeScript**| Type safety across app and backend     |
 | **TailwindCSS**| Styling for UI                        |
 
+---
 
 ## Live demo
 
 [sumo-name.vercel.app](https://sumo-name.vercel.app)
+
+---
 
 ## Why sumo
 
