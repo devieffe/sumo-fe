@@ -1,3 +1,5 @@
+import type { NextRequest } from 'next/server';
+
 const ipRequests = new Map<string, { count: number; timestamp: number }>();
 const MAX_REQUESTS = 10;
 const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -7,9 +9,15 @@ interface SerpResult {
   thumbnail?: string;
 }
 
-export async function POST(req: Request): Promise<Response> {
+interface ResponseData {
+  summary: string;
+  photoUrl?: string;
+  photoCaption?: string;
+  error?: string;
+}
+
+export async function POST(req: NextRequest) {
   try {
-    // --- RATE LIMITING ---
     const ip = req.headers.get('x-forwarded-for') || 'local';
     const now = Date.now();
     const existing = ipRequests.get(ip);
@@ -32,9 +40,8 @@ export async function POST(req: Request): Promise<Response> {
       ipRequests.set(ip, { count: 1, timestamp: now });
     }
 
-    // --- PARSE REQUEST ---
     const { topic } = await req.json();
-    if (!topic || topic.trim() === '') {
+    if (!topic?.trim()) {
       return new Response(JSON.stringify({ error: 'Missing topic' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -44,7 +51,10 @@ export async function POST(req: Request): Promise<Response> {
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
+<<<<<<< HEAD
     // --- FETCH SERPAPI ---
+=======
+>>>>>>> photo-caption-update
     const serpRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${serpApiKey}`
     );
@@ -66,13 +76,14 @@ export async function POST(req: Request): Promise<Response> {
       .map((r: SerpResult) => r.link)
       .filter(Boolean);
 
-    if (links.length === 0) {
+    if (!links.length) {
       return new Response(JSON.stringify({ error: 'No search results found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
+<<<<<<< HEAD
     // ====================================================================
     // 📸 FIND BEST PHOTO
     // Priority 1: Wikipedia image
@@ -121,6 +132,8 @@ export async function POST(req: Request): Promise<Response> {
     // OPENAI SUMMARY
     // ====================================================================
 
+=======
+>>>>>>> photo-caption-update
     const prompt = `
 The user searched for "${topic}". This name may refer to one or more real people.
 
@@ -134,8 +147,11 @@ The user searched for "${topic}". This name may refer to one or more real people
 Write a 200-word summary about that selected individual using the links below:
 
 ${links.join('\n')}
+<<<<<<< HEAD
 
 Do not mention ambiguity. Provide a single focused biography.
+=======
+>>>>>>> photo-caption-update
 `;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -147,10 +163,14 @@ Do not mention ambiguity. Provide a single focused biography.
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         messages: [
+<<<<<<< HEAD
           {
             role: 'system',
             content: 'You summarize real individuals based on source links.',
           },
+=======
+          { role: 'system', content: 'You are a helpful assistant that summarizes real people based on source links.' },
+>>>>>>> photo-caption-update
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
@@ -159,7 +179,7 @@ Do not mention ambiguity. Provide a single focused biography.
 
     const openaiData = await openaiRes.json();
 
-    if (openaiData.error) {
+    if ('error' in openaiData) {
       console.error('OpenAI error:', openaiData.error);
       return new Response(JSON.stringify({ error: openaiData.error.message }), {
         status: 500,
@@ -167,8 +187,20 @@ Do not mention ambiguity. Provide a single focused biography.
       });
     }
 
+    // Extract photo from Wikipedia or fallback
+    let photoUrl: string | undefined;
+    let photoCaption: string | undefined;
+    for (const link of links) {
+      if (link.includes('wikipedia.org')) {
+        photoUrl = `${link.replace(/\/$/, '')}.jpg`; // naive example
+        photoCaption = 'Image from Wikipedia';
+        break;
+      }
+    }
+
     const summary = openaiData.choices?.[0]?.message?.content || 'No summary returned.';
 
+<<<<<<< HEAD
     return new Response(
       JSON.stringify({
         summary,
@@ -180,6 +212,13 @@ Do not mention ambiguity. Provide a single focused biography.
         headers: { 'Content-Type': 'application/json' },
       }
     );
+=======
+    const responseData: ResponseData = { summary, photoUrl, photoCaption };
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+>>>>>>> photo-caption-update
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
