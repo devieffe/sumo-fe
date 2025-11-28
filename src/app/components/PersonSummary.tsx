@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import Image from 'next/image';
 
 interface SummaryResponse {
   summary: string;
@@ -26,36 +27,20 @@ export default function PersonSummary() {
     setPhotoUncertain(false);
 
     try {
-      const response = await fetch('/api/summarize-person', {
+      const res = await fetch('/api/summarize-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: trimmed }),
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        setSummary(`Error ${response.status}: ${response.statusText}`);
-        return;
+      const data: SummaryResponse = await res.json();
+      if (data.error) setSummary(`Error: ${data.error}`);
+      else {
+        setSummary(data.summary);
+        setPhotoUrl(data.photoUrl ?? null);
+        setPhotoUncertain(Boolean(data.photoUncertain));
       }
-
-      let data: SummaryResponse;
-      try {
-        data = await response.json();
-      } catch {
-        const text = await response.text();
-        setSummary(`Unexpected response: ${text}`);
-        return;
-      }
-
-      if (data.error) {
-        setSummary(`Error: ${data.error}`);
-        return;
-      }
-
-      setSummary(data.summary || 'No summary returned.');
-      setPhotoUrl(data.photoUrl ?? null);
-      setPhotoUncertain(Boolean(data.photoUncertain));
-    } catch (err) {
+    } catch {
       setSummary('Error contacting backend.');
     } finally {
       setLoading(false);
@@ -64,16 +49,13 @@ export default function PersonSummary() {
 
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4">
-      {/* Title */}
       <h1 className="text-2xl font-bold">Summarize about</h1>
-
-      {/* Input + Button on same line */}
       <div className="flex gap-2">
         <input
           type="text"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="Enter a name (e.g., Ada Lovelace)"
+          placeholder="Enter a name"
           className="flex-1 border rounded p-2"
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           maxLength={35}
@@ -87,19 +69,20 @@ export default function PersonSummary() {
         </button>
       </div>
 
-      {/* Summary with left-aligned photo as <figure> */}
       {summary && (
         <div className="mt-4 p-4 rounded border shadow-sm overflow-hidden">
           {photoUrl && (
-            <figure className="float-left mt-1 mr-4 mb-4 text-center">
-              <img
+            <figure className="float-left mr-4 mb-4 text-center">
+              <Image
                 src={photoUrl}
                 alt="Subject photo"
-                className="w-40 h-42 object-cover rounded border"
+                width={160}
+                height={160}
+                className="rounded border object-cover"
               />
               {photoUncertain && (
                 <figcaption className="text-xs text-gray-500 mt-1">
-                  Photo may not be accurate.
+                  ⚠️ Photo may not be accurate
                 </figcaption>
               )}
             </figure>
