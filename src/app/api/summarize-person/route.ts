@@ -1,15 +1,22 @@
+import type { NextRequest } from 'next/server';
+
 const ipRequests = new Map<string, { count: number; timestamp: number }>();
 const MAX_REQUESTS = 10;
 const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 interface SerpResult {
   link: string;
-  thumbnail?: string;
 }
 
-export async function POST(req: Request): Promise<Response> {
+interface ResponseData {
+  summary: string;
+  photoUrl?: string;
+  photoCaption?: string;
+  error?: string;
+}
+
+export async function POST(req: NextRequest) {
   try {
-    // --- RATE LIMITING ---
     const ip = req.headers.get('x-forwarded-for') || 'local';
     const now = Date.now();
     const existing = ipRequests.get(ip);
@@ -32,9 +39,8 @@ export async function POST(req: Request): Promise<Response> {
       ipRequests.set(ip, { count: 1, timestamp: now });
     }
 
-    // --- PARSE REQUEST ---
     const { topic } = await req.json();
-    if (!topic || topic.trim() === '') {
+    if (!topic?.trim()) {
       return new Response(JSON.stringify({ error: 'Missing topic' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -44,7 +50,6 @@ export async function POST(req: Request): Promise<Response> {
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
-    // --- FETCH SERPAPI ---
     const serpRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${serpApiKey}`
     );
@@ -59,83 +64,30 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const serpData = await serpRes.json();
-    const organic = serpData.organic_results || [];
-
-    const links = organic
+    const links = (serpData.organic_results as SerpResult[] || [])
       .slice(0, 20)
-      .map((r: SerpResult) => r.link)
+      .map((r) => r.link)
       .filter(Boolean);
 
-    if (links.length === 0) {
+    if (!links.length) {
       return new Response(JSON.stringify({ error: 'No search results found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // ====================================================================
-    // 📸 FIND BEST PHOTO
-    // Priority 1: Wikipedia image
-    // ====================================================================
-
-    async function getWikipediaPhoto(name: string) {
-      const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&titles=${encodeURIComponent(
-        name
-      )}`;
-
-      const res = await fetch(url);
-      if (!res.ok) return null;
-
-      const data = await res.json();
-      const pages = data?.query?.pages;
-      if (!pages) return null;
-
-      const page = Object.values(pages)[0] as any;
-      return page?.original?.source || null;
-    }
-
-    let photoUrl: string | null = null;
-    let photoUncertain = false;
-
-    // Try Wikipedia (strict)
-    photoUrl = await getWikipediaPhoto(topic);
-
-    // ====================================================================
-    // Fallback: SerpAPI images_results or thumbnails
-    // ====================================================================
-    if (!photoUrl) {
-      const serpImages = serpData.images_results || [];
-      if (serpImages.length > 0 && serpImages[0].original) {
-        photoUrl = serpImages[0].original;
-        photoUncertain = true;
-      } else {
-        const firstThumb = organic[0]?.thumbnail;
-        if (firstThumb) {
-          photoUrl = firstThumb;
-          photoUncertain = true;
-        }
-      }
-    }
-
-    // ====================================================================
-    // OPENAI SUMMARY
-    // ====================================================================
-
     const prompt = `
 The user searched for "${topic}". This name may refer to one or more real people.
 
 1. If it's not a real person, respond only: "Not a real person."
-2. If it's a common name with multiple individuals, select only one notable person based on:
-   - Relevance (highest significance in results)
-   - Country of origin
-   - Profession
-   - Uniqueness
+2. If it's a common name with multiple people, pick only one notable individual based on:
+   - Relevance (most known in results),
+   - Country of origin,
+   - Profession and uniqueness.
 
-Write a 200-word summary about that selected individual using the links below:
+Write a 200-word summary about that one real person, using these links:
 
 ${links.join('\n')}
-
-Do not mention ambiguity. Provide a single focused biography.
 `;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -147,10 +99,7 @@ Do not mention ambiguity. Provide a single focused biography.
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         messages: [
-          {
-            role: 'system',
-            content: 'You summarize real individuals based on source links.',
-          },
+          { role: 'system', content: 'You are a helpful assistant that summarizes real people based on source links.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
@@ -159,7 +108,7 @@ Do not mention ambiguity. Provide a single focused biography.
 
     const openaiData = await openaiRes.json();
 
-    if (openaiData.error) {
+    if ('error' in openaiData) {
       console.error('OpenAI error:', openaiData.error);
       return new Response(JSON.stringify({ error: openaiData.error.message }), {
         status: 500,
@@ -167,19 +116,24 @@ Do not mention ambiguity. Provide a single focused biography.
       });
     }
 
+    // Extract photo from Wikipedia or fallback
+    let photoUrl: string | undefined;
+    let photoCaption: string | undefined;
+    for (const link of links) {
+      if (link.includes('wikipedia.org')) {
+        photoUrl = `${link.replace(/\/$/, '')}.jpg`; // naive example
+        photoCaption = 'Image from Wikipedia';
+        break;
+      }
+    }
+
     const summary = openaiData.choices?.[0]?.message?.content || 'No summary returned.';
 
-    return new Response(
-      JSON.stringify({
-        summary,
-        photoUrl,
-        photoUncertain,
-      }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    const responseData: ResponseData = { summary, photoUrl, photoCaption };
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
