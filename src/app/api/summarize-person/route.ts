@@ -4,6 +4,7 @@ const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 interface SerpResult {
   link: string;
+  thumbnail?: string;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -43,7 +44,7 @@ export async function POST(req: Request): Promise<Response> {
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
-    // --- FETCH FROM SERPAPI ---
+    // --- FETCH SERPAPI ---
     const serpRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${serpApiKey}`
     );
@@ -58,9 +59,11 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const serpData = await serpRes.json();
-    const links = (serpData.organic_results as SerpResult[] || [])
+    const organic = serpData.organic_results || [];
+
+    const links = organic
       .slice(0, 20)
-      .map((r) => r.link)
+      .map((r: SerpResult) => r.link)
       .filter(Boolean);
 
     if (links.length === 0) {
@@ -70,21 +73,69 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // --- PROMPT OPENAI ---
+    // ====================================================================
+    // 📸 FIND BEST PHOTO
+    // Priority 1: Wikipedia image
+    // ====================================================================
+
+    async function getWikipediaPhoto(name: string) {
+      const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&titles=${encodeURIComponent(
+        name
+      )}`;
+
+      const res = await fetch(url);
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      const pages = data?.query?.pages;
+      if (!pages) return null;
+
+      const page = Object.values(pages)[0] as any;
+      return page?.original?.source || null;
+    }
+
+    let photoUrl: string | null = null;
+    let photoUncertain = false;
+
+    // Try Wikipedia (strict)
+    photoUrl = await getWikipediaPhoto(topic);
+
+    // ====================================================================
+    // Fallback: SerpAPI images_results or thumbnails
+    // ====================================================================
+    if (!photoUrl) {
+      const serpImages = serpData.images_results || [];
+      if (serpImages.length > 0 && serpImages[0].original) {
+        photoUrl = serpImages[0].original;
+        photoUncertain = true;
+      } else {
+        const firstThumb = organic[0]?.thumbnail;
+        if (firstThumb) {
+          photoUrl = firstThumb;
+          photoUncertain = true;
+        }
+      }
+    }
+
+    // ====================================================================
+    // OPENAI SUMMARY
+    // ====================================================================
+
     const prompt = `
 The user searched for "${topic}". This name may refer to one or more real people.
 
 1. If it's not a real person, respond only: "Not a real person."
-2. If it's a common name with multiple people, pick only one notable individual based on:
-   - Relevance (most known in results),
-   - Country of origin,
-   - Profession and uniqueness.
+2. If it's a common name with multiple individuals, select only one notable person based on:
+   - Relevance (highest significance in results)
+   - Country of origin
+   - Profession
+   - Uniqueness
 
-Write a 200-word summary about that one real person, using these links:
+Write a 200-word summary about that selected individual using the links below:
 
 ${links.join('\n')}
 
-Do not mention that multiple people may share the same name. Just provide a focused summary of the selected person.
+Do not mention ambiguity. Provide a single focused biography.
 `;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -98,7 +149,7 @@ Do not mention that multiple people may share the same name. Just provide a focu
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful assistant that summarizes real people based on source links.',
+            content: 'You summarize real individuals based on source links.',
           },
           { role: 'user', content: prompt },
         ],
@@ -118,10 +169,17 @@ Do not mention that multiple people may share the same name. Just provide a focu
 
     const summary = openaiData.choices?.[0]?.message?.content || 'No summary returned.';
 
-    return new Response(JSON.stringify({ summary }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        summary,
+        photoUrl,
+        photoUncertain,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
