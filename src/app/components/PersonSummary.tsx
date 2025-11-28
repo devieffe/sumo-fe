@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import Image from 'next/image';
 
 interface SummaryResponse {
   summary: string;
@@ -16,11 +15,15 @@ export default function PersonSummary() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoUncertain, setPhotoUncertain] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Mark component as hydrated
+  React.useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const handleSearch = useCallback(async () => {
-    const trimmed = topic.trim();
-    if (!trimmed) return;
-
+    if (!topic.trim()) return;
     setLoading(true);
     setSummary('');
     setPhotoUrl(null);
@@ -30,14 +33,13 @@ export default function PersonSummary() {
       const res = await fetch('/api/summarize-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: trimmed }),
+        body: JSON.stringify({ topic: topic.trim() }),
       });
 
       const data: SummaryResponse = await res.json();
-
       if (data.error) setSummary(`Error: ${data.error}`);
       else {
-        setSummary(data.summary);
+        setSummary(data.summary || 'No summary returned.');
         setPhotoUrl(data.photoUrl ?? null);
         setPhotoUncertain(Boolean(data.photoUncertain));
       }
@@ -48,16 +50,18 @@ export default function PersonSummary() {
     }
   }, [topic]);
 
+  // Don't render dynamic content until after hydration
+  if (!hydrated) return null;
+
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4">
       <h1 className="text-2xl font-bold">Summarize about</h1>
-
       <div className="flex gap-2">
         <input
           type="text"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="Enter a name"
+          placeholder="Enter a name (e.g., Ada Lovelace)"
           className="flex-1 border rounded p-2"
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           maxLength={35}
@@ -74,17 +78,15 @@ export default function PersonSummary() {
       {summary && (
         <div className="mt-4 p-4 rounded border shadow-sm overflow-hidden">
           {photoUrl && (
-            <figure className="float-left mr-4 mb-4 text-center">
-              <Image
+            <figure className="float-left mt-1 mr-4 mb-4 text-center">
+              <img
                 src={photoUrl}
                 alt="Subject photo"
-                width={160}
-                height={160}
-                className="rounded border object-cover"
+                className="w-40 h-42 object-cover rounded border"
               />
               {photoUncertain && (
                 <figcaption className="text-xs text-gray-500 mt-1">
-                  ⚠️ Photo may not be accurate
+                  Photo may not be accurate.
                 </figcaption>
               )}
             </figure>
