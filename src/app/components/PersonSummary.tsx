@@ -34,6 +34,7 @@ export default function PersonSummary() {
       });
 
       const data: SummaryResponse = await res.json();
+
       if (data.error) setSummary(`Error: ${data.error}`);
       else {
         setSummary(data.summary);
@@ -50,6 +51,7 @@ export default function PersonSummary() {
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4">
       <h1 className="text-2xl font-bold">Summarize about</h1>
+
       <div className="flex gap-2">
         <input
           type="text"
