@@ -68,7 +68,7 @@ export default function PersonSummary() {
       <h1 className="text-2xl font-bold">Summarize about</h1>
 
       {/* Input + Button on same line */}
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         <input
           type="text"
           value={topic}
