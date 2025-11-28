@@ -103,9 +103,7 @@ export async function POST(req: NextRequest) {
       return page?.original?.source ?? null;
     }
 
-    let photoUrl: string | undefined;
-
-    photoUrl = await getWikipediaPhoto(topic);
+let photoUrl = await getWikipediaPhoto(topic);
 
     if (!photoUrl && serpData.images_results?.length) {
       const firstImage = serpData.images_results[0];
