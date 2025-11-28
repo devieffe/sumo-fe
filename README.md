@@ -10,6 +10,9 @@ An AI-powered web application built with **Next.js 15**, **OpenAI**, and **SerpA
 
 ## Features
 
+
+- **LATEST UPDATE**: Main subject picture added.
+- **LATEST UPDATE**: Any subject search logics implemented.
 - **Live web search**: Uses SerpAPI to gather top links for the query.
 - **Smart summarization**: Uses OpenAI’s GPT model to analyze and summarize the most relevant subject.
 - **Name disambiguation**: If the name refers to multiple individuals, the app selects one based on most common parameters.
