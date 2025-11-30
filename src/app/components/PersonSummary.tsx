@@ -55,34 +55,34 @@ export default function PersonSummary() {
 
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4">
-      <h1 className="text-2xl font-bold">Summarize about</h1>
-      <div className="flex gap-2">
+      <h1 className="text-2xl font-bold mb-3">Summarize about</h1>
+      <div className="flex gap-3 my-5">
         <input
           type="text"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           placeholder="Enter a name (e.g., Ada Lovelace)"
-          className="flex-1 border rounded p-2"
+          className="flex-1 border rounded p-2 capitalize"
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           maxLength={35}
         />
         <button
           onClick={handleSearch}
           disabled={loading || !topic.trim()}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded w-32 flex-shrink-0"
+          className="bg-blue-600 hover:bg-blue-700 cursor-pointer text-white font-semibold p-2 px-3 rounded w-40"
         >
           {loading ? 'Searching...' : 'Search'}
         </button>
       </div>
 
       {summary && (
-        <div className="mt-4 p-4 rounded border shadow-sm overflow-hidden">
+        <div className="mt-3 p-4 rounded border shadow-sm overflow-hidden">
           {photoUrl && (
-            <figure className="float-left mt-1 mr-4 mb-4 text-center">
+            <figure className="float-left mt-1 mr-4 mb-0 text-center">
               <img
                 src={photoUrl}
                 alt="Subject photo"
-                className="w-40 h-42 object-cover rounded border"
+                className="w-40 h-38 object-cover bg-white rounded border"
               />
               {photoUncertain && (
                 <figcaption className="text-xs text-gray-500 mt-1">
