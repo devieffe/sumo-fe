@@ -1,5 +1,16 @@
 import type { NextRequest } from 'next/server';
 
+interface SerpApiResult {
+  link: string;
+  original?: string;
+  thumbnail?: string;
+}
+
+interface SerpApiResponse {
+  organic_results: { link: string }[];
+  images_results?: { original?: string; thumbnail?: string }[];
+}
+
 const MAX_REQUESTS = 100;
 const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 const ipRequests = new Map<string, { count: number; timestamp: number }>();
@@ -14,7 +25,7 @@ function isValidQuery(query: string) {
 // --- Fetch og:image from fallback link ---
 async function fetchOgImage(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { method: 'GET' });
+    const res = await fetch(url);
     const html = await res.text();
     const ogMatch = html.match(/<meta property=["']og:image["'] content=["'](.*?)["']/i);
     return ogMatch ? ogMatch[1] : null;
@@ -24,8 +35,7 @@ async function fetchOgImage(url: string): Promise<string | null> {
 }
 
 // --- Get first valid image ---
-async function getFirstImage(searchData: any, firstLink?: string): Promise<string | null> {
-  // 1. Try SERPAPI images_results
+async function getFirstImage(searchData: SerpApiResponse, firstLink?: string): Promise<string | null> {
   if (searchData.images_results?.length) {
     for (const img of searchData.images_results.slice(0, 5)) {
       const url = img.original || img.thumbnail;
@@ -33,19 +43,16 @@ async function getFirstImage(searchData: any, firstLink?: string): Promise<strin
     }
   }
 
-  // 2. Try og:image from first organic link
   if (firstLink) {
     const fallback = await fetchOgImage(firstLink);
     if (fallback) return fallback;
   }
 
-  // 3. No image found
-  return null;
+  return null; // No image
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // --- Rate limit ---
     const ip = req.headers.get('x-forwarded-for') || 'local';
     const now = Date.now();
     const existing = ipRequests.get(ip);
@@ -58,7 +65,6 @@ export async function POST(req: NextRequest) {
       ipRequests.set(ip, { count: 1, timestamp: now });
     }
 
-    // --- Input validation ---
     const { topic } = await req.json();
     if (!isValidQuery(topic)) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 400 });
 
@@ -71,14 +77,10 @@ export async function POST(req: NextRequest) {
     );
     if (!searchRes.ok) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 502 });
 
-    const searchData = await searchRes.json();
-    const links: string[] = (searchData.organic_results || [])
-      .slice(0, 15)
-      .map((r: any) => r.link)
-      .filter(Boolean);
+    const searchData: SerpApiResponse = await searchRes.json();
+    const links: string[] = searchData.organic_results.slice(0, 15).map(r => r.link).filter(Boolean);
     if (!links.length) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 404 });
 
-    // --- Image ---
     const photoUrl = await getFirstImage(searchData, links[0]);
 
     // --- OpenAI summary ---
@@ -103,7 +105,7 @@ ${links.join('\n')}
       }),
     });
 
-    const openaiData = await openaiRes.json();
+    const openaiData: any = await openaiRes.json();
     const summary = openaiData?.choices?.[0]?.message?.content || "No summary available.";
 
     return new Response(JSON.stringify({ summary, photoUrl }), {
