@@ -1,117 +1,117 @@
-import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import type { NextRequest } from 'next/server';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-const ERROR_MSG = "No results available.";
-const ipRequests = new Map<string, { count: number; timestamp: number }>();
 const MAX_REQUESTS = 100;
 const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+const ipRequests = new Map<string, { count: number; timestamp: number }>();
 
-// --- Type definitions ---
-interface SerpImage {
-  original?: string;
-  thumbnail?: string;
+const ERROR_MSG = "No results.";
+const LIMIT_MSG = "Rate limit exceeded. Try again in 2 hours.";
+
+function isValidQuery(query: string) {
+  return !!query?.trim() && /^[a-zA-Z\s'.-]+$/.test(query);
 }
 
-interface SerpResult {
-  link?: string;
-}
-
-// --- Validate query ---
-function isValidQuery(q: string) {
-  return /^[a-zA-Z\s'.-]+$/.test(q.trim());
-}
-
-// --- Fetch with timeout ---
-async function fetchWithTimeout(url: string, timeout = 3000): Promise<Response | null> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+// --- Fetch og:image from fallback link ---
+async function fetchOgImage(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    return res;
+    const res = await fetch(url, { method: 'GET' });
+    const html = await res.text();
+    const ogMatch = html.match(/<meta property=["']og:image["'] content=["'](.*?)["']/i);
+    return ogMatch ? ogMatch[1] : null;
   } catch {
     return null;
   }
 }
 
-// --- Pick first available image ---
-function pickSerpImage(images: SerpImage[]): string | null {
-  if (!images?.length) return null;
-  const img = images.find((i) => i.original || i.thumbnail);
-  return img?.original || img?.thumbnail || null;
-}
-
-// --- Generate summary via OpenAI ---
-async function generateSummary(topic: string, links: string[]): Promise<string> {
-  try {
-    const prompt = links.length
-      ? `Write a concise 150-word summary about "${topic}" using these links if possible:\n${links.join("\n")}`
-      : `Write a concise 150-word summary about "${topic}".`;
-
-    const res = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-    });
-    return res.choices?.[0]?.message?.content?.trim() || "";
-  } catch {
-    return "";
-  }
-}
-
-// --- Main API ---
-export async function POST(req: Request) {
-  try {
-    const { topic } = await req.json();
-    if (!topic || !isValidQuery(topic)) {
-      return NextResponse.json({ summary: "Invalid query.", photoUrl: null }, { status: 400 });
+// --- Get first valid image ---
+async function getFirstImage(searchData: any, firstLink?: string): Promise<string | null> {
+  // 1. Try SERPAPI images_results
+  if (searchData.images_results?.length) {
+    for (const img of searchData.images_results.slice(0, 5)) {
+      const url = img.original || img.thumbnail;
+      if (url) return url;
     }
+  }
 
-    // --- RATE LIMIT ---
-    const ip = req.headers.get("x-forwarded-for") || "local";
+  // 2. Try og:image from first organic link
+  if (firstLink) {
+    const fallback = await fetchOgImage(firstLink);
+    if (fallback) return fallback;
+  }
+
+  // 3. No image found
+  return null;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    // --- Rate limit ---
+    const ip = req.headers.get('x-forwarded-for') || 'local';
     const now = Date.now();
     const existing = ipRequests.get(ip);
-    if (existing && now - existing.timestamp < WINDOW_MS && existing.count >= MAX_REQUESTS) {
-      return NextResponse.json({ summary: "Rate limit exceeded.", photoUrl: null }, { status: 429 });
+    if (existing) {
+      if (now - existing.timestamp < WINDOW_MS && existing.count >= MAX_REQUESTS)
+        return new Response(JSON.stringify({ error: LIMIT_MSG }), { status: 429 });
+      existing.count++;
+      ipRequests.set(ip, existing);
+    } else {
+      ipRequests.set(ip, { count: 1, timestamp: now });
     }
-    ipRequests.set(ip, { count: (existing?.count || 0) + 1, timestamp: now });
+
+    // --- Input validation ---
+    const { topic } = await req.json();
+    if (!isValidQuery(topic)) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 400 });
+
+    const serpApiKey = process.env.SERPAPI_API_KEY!;
+    const openaiApiKey = process.env.OPENAI_API_KEY!;
 
     // --- SERPAPI search ---
-    const serpUrl = `https://serpapi.com/search.json?q=${encodeURIComponent(
-      topic
-    )}&num=10&tbm=isch&api_key=${process.env.SERPAPI_API_KEY}`;
-    const serpRes = await fetchWithTimeout(serpUrl, 5000);
-    const serpData: { organic_results?: SerpResult[]; images_results?: SerpImage[] } = serpRes
-      ? await serpRes.json()
-      : { organic_results: [], images_results: [] };
+    const searchRes = await fetch(
+      `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=25&ijn=0&api_key=${serpApiKey}`
+    );
+    if (!searchRes.ok) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 502 });
 
-    // --- Links from SERPAPI ---
-    const links: string[] = (serpData.organic_results || [])
-      .map((x: SerpResult) => x.link)
-      .filter((link): link is string => Boolean(link))
-      .slice(0, 10);
+    const searchData = await searchRes.json();
+    const links: string[] = (searchData.organic_results || [])
+      .slice(0, 15)
+      .map((r: any) => r.link)
+      .filter(Boolean);
+    if (!links.length) return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 404 });
 
-    // --- Pick photo ---
-    let photoUrl: string | null = pickSerpImage(serpData.images_results || []);
+    // --- Image ---
+    const photoUrl = await getFirstImage(searchData, links[0]);
 
-    // --- Fallback Wikipedia image ---
-    if (!photoUrl) {
-      const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
-      const wikiRes = await fetchWithTimeout(wikiUrl, 2000);
-      if (wikiRes?.ok) {
-        const wikiData: { originalimage?: { source: string }; thumbnail?: { source: string } } = await wikiRes.json();
-        photoUrl = wikiData.originalimage?.source || wikiData.thumbnail?.source || null;
-      }
-    }
+    // --- OpenAI summary ---
+    const prompt = `
+Summarize the person or character described by the following links in 150-200 words.
+Skip mentioning social media profiles.
+Use only information from these sources. Do not include social media info.
 
-    // --- Summary ---
-    let summary = await generateSummary(topic, links);
-    if (!summary) summary = ERROR_MSG;
+${links.join('\n')}
+`;
 
-    return NextResponse.json({ summary, photoUrl });
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'Summarize a person or character from the links provided.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    const openaiData = await openaiRes.json();
+    const summary = openaiData?.choices?.[0]?.message?.content || "No summary available.";
+
+    return new Response(JSON.stringify({ summary, photoUrl }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
-    console.error("API ERROR:", err);
-    return NextResponse.json({ summary: ERROR_MSG, photoUrl: null }, { status: 500 });
+    console.error(err);
+    return new Response(JSON.stringify({ error: ERROR_MSG }), { status: 500 });
   }
 }

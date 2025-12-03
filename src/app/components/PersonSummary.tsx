@@ -1,5 +1,5 @@
 'use client';
-import Image from 'next/image';
+
 import React, { useState, useCallback } from 'react';
 
 interface SummaryResponse {
@@ -15,10 +15,13 @@ export default function PersonSummary() {
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  React.useEffect(() => setHydrated(true), []);
+  React.useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const handleSearch = useCallback(async () => {
     if (!topic.trim()) return;
+
     setLoading(true);
     setSummary('');
     setPhotoUrl(null);
@@ -31,8 +34,10 @@ export default function PersonSummary() {
       });
 
       const data: SummaryResponse = await res.json();
-      if (data.error) setSummary(`Error: ${data.error}`);
-      else {
+
+      if (data.error) {
+        setSummary(`Error: ${data.error}`);
+      } else {
         setSummary(data.summary || 'No summary returned.');
         setPhotoUrl(data.photoUrl ?? null);
       }
@@ -56,7 +61,10 @@ export default function PersonSummary() {
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           maxLength={35}
         />
-        <button onClick={handleSearch} disabled={loading || !topic.trim()}>
+        <button
+          onClick={handleSearch}
+          disabled={loading || !topic.trim()}
+        >
           {loading ? 'Searching...' : 'Search'}
         </button>
       </div>
@@ -65,7 +73,7 @@ export default function PersonSummary() {
         <div className="info-container">
           {photoUrl && (
             <figure>
-              <Image src={photoUrl} alt="Photo" width={300} height={300} />
+              <img src={photoUrl} alt="Photo" />
             </figure>
           )}
           <div className="whitespace-pre-wrap">{summary}</div>
