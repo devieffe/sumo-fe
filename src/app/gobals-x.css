@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* ----------------- Root variables (Light by default) ----------------- */
+:root {
+  --color-background: #f9f9f9;
+  --color-foreground: #171717;
+
+  --font-sans: 'Geist Sans', sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+
+/* ----------------- Dark mode (system preference) ----------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0a0a0a;
+    --color-foreground: #eee;
+  }
+}
+
+/* ----------------- Body styling ----------------- */
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ----------------- Example utility classes for Tailwind usage ----------------- */
+.bg-primary {
+  background-color: var(--color-background);
+}
+
+.text-primary {
+  color: var(--color-foreground);
+}

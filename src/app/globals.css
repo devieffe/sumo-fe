@@ -1,35 +1,112 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap");
 @import "tailwindcss";
+
+:root {
+  --color-bg: #f9f9f9;
+  --color-fg: #000000;
+}
+
+/* rest of your CSS */
+
 
 /* ----------------- Root variables (Light by default) ----------------- */
 :root {
-  --color-background: #f9f9f9;
-  --color-foreground: #171717;
+  --color-bg: #f9f9f9;
+  --color-fg: #000000;
+  --color-fg2: rgba(255,255,255,0.05);
 
-  --font-sans: 'Geist Sans', sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  --font-sans: 'Montserrat', sans-serif;
 }
 
 /* ----------------- Dark mode (system preference) ----------------- */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: #0a0a0a;
-    --color-foreground: #eee;
+    --color-bg: #252525;
+    --color-fg: #eee;
   }
 }
 
+
+
+*:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+
 /* ----------------- Body styling ----------------- */
 body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  background-color: var(--color-bg);
+  color: var(--color-fg);
   font-family: var(--font-sans);
   transition: background-color 0.3s ease, color 0.3s ease;
+  letter-spacing: -.0005em;
+  font-size: 1.15em;
 }
 
 /* ----------------- Example utility classes for Tailwind usage ----------------- */
 .bg-primary {
-  background-color: var(--color-background);
+  background-color: var(--color-bg);
 }
 
 .text-primary {
-  color: var(--color-foreground);
+  color: var(--color-fg);
+}
+
+.summ {
+  max-width: 680px;
+  min-width: 280px;
+  margin: 0 auto;
+  padding: 20px;
+
+  .search-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 40px;
+
+  input[type="text"] {
+    border: 0;
+    border-bottom: 2px solid var(--color-fg);
+    display: block;
+    width: 100%;
+    font-weight: 400;
+  }
+
+  button {
+    border: 0;
+    background-color: var(--color-fg);
+    color: var(--color-bg);
+    border-radius: 30px;
+    padding: .5em 1.2em;
+    width: 100%;
+    max-width: 160px;
+    font-weight: 700;
+    cursor: pointer;
+    background: linear-gradient(to right,  #e5a595 1%,#f9eeb3 21%,#ffffff 50%,#b5e0a8 80%,#95b2ed 100%,#95b2ed 102%); 
+  }
+}
+
+.info-container {
+  figure {
+    float: left;
+    min-width: 100px;
+    width: 40%;
+    max-width: 240px;
+    margin-right: 20px;
+    margin-bottom: 10px;
+
+    img {
+      width: 100%;
+      border-radius: 20px;
+      border: 1px solid var(--color-fg);
+      background-color: var(--color-fg2);
+    }
+  }
+
+  .whitespace-pre-wrap {
+      font-size: .85em;
+  }
+}
+
+
 }
