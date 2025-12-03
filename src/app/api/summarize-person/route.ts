@@ -1,18 +1,20 @@
 import type { NextRequest } from 'next/server';
 
-interface SerpApiResult {
-  link: string;
-  original?: string;
-  thumbnail?: string;
-}
-
 interface SerpApiResponse {
   organic_results: { link: string }[];
   images_results?: { original?: string; thumbnail?: string }[];
 }
 
+interface OpenAIChoice {
+  message?: { content?: string };
+}
+
+interface OpenAIResponse {
+  choices?: OpenAIChoice[];
+}
+
 const MAX_REQUESTS = 100;
-const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+const WINDOW_MS = 2 * 60 * 60 * 1000;
 const ipRequests = new Map<string, { count: number; timestamp: number }>();
 
 const ERROR_MSG = "No results.";
@@ -22,7 +24,6 @@ function isValidQuery(query: string) {
   return !!query?.trim() && /^[a-zA-Z\s'.-]+$/.test(query);
 }
 
-// --- Fetch og:image from fallback link ---
 async function fetchOgImage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
@@ -34,7 +35,6 @@ async function fetchOgImage(url: string): Promise<string | null> {
   }
 }
 
-// --- Get first valid image ---
 async function getFirstImage(searchData: SerpApiResponse, firstLink?: string): Promise<string | null> {
   if (searchData.images_results?.length) {
     for (const img of searchData.images_results.slice(0, 5)) {
@@ -48,7 +48,7 @@ async function getFirstImage(searchData: SerpApiResponse, firstLink?: string): P
     if (fallback) return fallback;
   }
 
-  return null; // No image
+  return null; // no image
 }
 
 export async function POST(req: NextRequest) {
@@ -71,7 +71,6 @@ export async function POST(req: NextRequest) {
     const serpApiKey = process.env.SERPAPI_API_KEY!;
     const openaiApiKey = process.env.OPENAI_API_KEY!;
 
-    // --- SERPAPI search ---
     const searchRes = await fetch(
       `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=25&ijn=0&api_key=${serpApiKey}`
     );
@@ -83,7 +82,6 @@ export async function POST(req: NextRequest) {
 
     const photoUrl = await getFirstImage(searchData, links[0]);
 
-    // --- OpenAI summary ---
     const prompt = `
 Summarize the person or character described by the following links in 150-200 words.
 Skip mentioning social media profiles.
@@ -105,8 +103,8 @@ ${links.join('\n')}
       }),
     });
 
-    const openaiData: any = await openaiRes.json();
-    const summary = openaiData?.choices?.[0]?.message?.content || "No summary available.";
+    const openaiData: OpenAIResponse = await openaiRes.json();
+    const summary = openaiData.choices?.[0].message?.content || "No summary available.";
 
     return new Response(JSON.stringify({ summary, photoUrl }), {
       status: 200,
