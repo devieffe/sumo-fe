@@ -1,141 +1,107 @@
-import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-
+const ERROR_MSG = "No results.";
 const ipRequests = new Map<string, { count: number; timestamp: number }>();
 const MAX_REQUESTS = 100;
-const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
-const ERROR_MSG = "No results.";
-const LIMIT_MSG = "Rate limit exceeded. Try again in 2 hours.";
+const WINDOW_MS = 2 * 60 * 60 * 1000; // 2h
 
-// ---------------- Types ----------------
-interface SerpImage {
-  original: string;
-  original_width?: number;
-  original_height?: number;
-}
-
-interface SerpResult {
-  link: string;
-}
-
-interface WikipediaPage {
-  original?: { source: string };
-  images?: { title: string }[];
-}
-
-// ---------------- Validate query ----------------
+// --- Validate query ---
 function isValidQuery(q: string) {
   return /^[a-zA-Z\s'.-]+$/.test(q.trim());
 }
 
-// ---------------- Filter portrait images ----------------
-function filterPortraitImages(images: SerpImage[]): string[] {
-  return images
-    .filter(img => img.original && /\.(jpe?g|png|webp)$/i.test(img.original))
-    .filter(img => {
-      const w = img.original_width || 1;
-      const h = img.original_height || 1;
-      const ratio = h / w;
-      return ratio > 0.6 && ratio < 2; // allow vertical portraits
-    })
-    .map(img => img.original);
-}
-
-// ---------------- Wikipedia portrait ----------------
-async function getWikipediaPortrait(name: string): Promise<string | null> {
+// --- Fetch with timeout ---
+async function fetchWithTimeout(url: string, timeout = 3000): Promise<Response | null> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
-      name
-    )}&prop=pageimages|images&format=json&piprop=original`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const pages = Object.values(data.query.pages) as WikipediaPage[];
-    const page = pages[0];
-
-    // 1️⃣ Try piprop original first
-    if (page?.original?.source) return page.original.source;
-
-    // 2️⃣ Fallback to first valid image from page.images
-    if (page.images?.length) {
-      for (const img of page.images) {
-        if (!img.title) continue;
-        const ext = img.title.split('.').pop()?.toLowerCase();
-        if (!ext || !['jpg', 'jpeg', 'png', 'webp'].includes(ext)) continue;
-
-        // Convert File: to direct URL
-        return `https://en.wikipedia.org/wiki/Special:FilePath/${encodeURIComponent(
-          img.title.replace('File:', '')
-        )}`;
-      }
-    }
-
-    return null;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    return res;
   } catch {
     return null;
   }
 }
 
-// ----------------- API ----------------
-export async function POST(req: Request) {
+// --- Pick first valid image from SERPAPI ---
+function pickSerpImage(images: any[]): string | null {
+  if (!images?.length) return null;
+  const img = images.find((i) => i.original || i.thumbnail);
+  return img?.original || img?.thumbnail || null;
+}
+
+// --- Generate summary via OpenAI ---
+async function generateSummary(topic: string, links: string[]): Promise<string> {
   try {
-    const { topic } = await req.json();
-    if (!topic || !isValidQuery(topic))
-      return NextResponse.json({ error: "Invalid topic" }, { status: 400 });
+    const prompt = links.length
+      ? `Write a concise 150-200 word summary about "${topic}" using these links if possible:\n${links.join("\n")}`
+      : `Write a concise 150-200 word summary about "${topic}".`;
 
-    // --- RATE LIMIT ---
-    const ip = req.headers.get('x-forwarded-for') || 'local';
-    const now = Date.now();
-    const existing = ipRequests.get(ip);
-    if (existing && now - existing.timestamp < WINDOW_MS && existing.count >= MAX_REQUESTS) {
-      return NextResponse.json({ error: LIMIT_MSG }, { status: 429 });
-    }
-    ipRequests.set(ip, { count: (existing?.count || 0) + 1, timestamp: now });
-
-    // --- SERPAPI SEARCH ---
-    const serpRes = await fetch(
-      `https://serpapi.com/search.json?q=${encodeURIComponent(topic)}&num=20&api_key=${process.env.SERPAPI_API_KEY}`
-    );
-    if (!serpRes.ok) return NextResponse.json({ error: ERROR_MSG }, { status: 502 });
-
-    const serp = await serpRes.json();
-    const links: string[] =
-      serp.organic_results?.slice(0, 20).map((x: SerpResult) => x.link).filter(Boolean) || [];
-    const serpImages = filterPortraitImages(serp.images_results || []);
-
-    if (!links.length) return NextResponse.json({ error: ERROR_MSG }, { status: 404 });
-
-    // --- PICK PHOTO ---
-    let photoUrl: string | null = await getWikipediaPortrait(topic);
-    if (!photoUrl && serpImages.length) photoUrl = serpImages[0];
-
-    // --- LLM SUMMARY ---
-    const prompt = `
-Write a concise 150-200 word summary about "${topic}".
-Use ONLY the following source links.
-Do NOT mention social media, type, or unrelated info.
-Return UNKNOWN_PERSON if not a real person or fictional character.
-
-Links:
-${links.join('\n')}
-`;
-
-    const sumRes = await openai.chat.completions.create({
+    const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
     });
+    return res.choices?.[0]?.message?.content?.trim() || "";
+  } catch {
+    return "";
+  }
+}
 
-    let summary = sumRes.choices?.[0]?.message?.content?.trim() || "";
-    if (!summary || summary.includes("UNKNOWN_PERSON"))
-      summary = `No summary found for "${topic}".`;
+// --- Main API ---
+export async function POST(req: Request) {
+  try {
+    const { topic } = await req.json();
+    if (!topic || !isValidQuery(topic)) {
+      return NextResponse.json({ summary: "Invalid query.", photoUrl: null }, { status: 400 });
+    }
+
+    // --- RATE LIMIT ---
+    const ip = req.headers.get("x-forwarded-for") || "local";
+    const now = Date.now();
+    const existing = ipRequests.get(ip);
+    if (existing && now - existing.timestamp < WINDOW_MS && existing.count >= MAX_REQUESTS) {
+      return NextResponse.json({ summary: "Rate limit exceeded.", photoUrl: null }, { status: 429 });
+    }
+    ipRequests.set(ip, { count: (existing?.count || 0) + 1, timestamp: now });
+
+    // --- SERPAPI search (web + images) ---
+    const serpUrl = `https://serpapi.com/search.json?q=${encodeURIComponent(
+      topic
+    )}&num=10&tbm=isch&api_key=${process.env.SERPAPI_API_KEY}`;
+    const serpRes = await fetchWithTimeout(serpUrl, 5000);
+    const serpData = serpRes ? await serpRes.json() : { organic_results: [], images_results: [] };
+
+    const links: string[] = (serpData.organic_results || [])
+      .map((x: any) => x.link)
+      .filter(Boolean)
+      .slice(0, 10);
+
+    // --- Pick photo ---
+    let photoUrl: string | null = pickSerpImage(serpData.images_results);
+
+    // --- Fallback Wikipedia image ---
+    if (!photoUrl) {
+      const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
+      const wikiRes = await fetchWithTimeout(wikiUrl, 2000);
+      if (wikiRes?.ok) {
+        const wikiData = await wikiRes.json();
+        photoUrl = wikiData.originalimage?.source || wikiData.thumbnail?.source || null;
+      }
+    }
+
+    // --- Fallback LinkedIn image ---
+    // (Optionally implement LinkedIn image fetch if you have API/access)
+
+    // --- Summary ---
+    let summary = await generateSummary(topic, links);
+    if (!summary) summary = ERROR_MSG;
 
     return NextResponse.json({ summary, photoUrl });
   } catch (err) {
     console.error("API ERROR:", err);
-    return NextResponse.json({ error: ERROR_MSG }, { status: 500 });
+    return NextResponse.json({ summary: ERROR_MSG, photoUrl: null }, { status: 500 });
   }
 }
