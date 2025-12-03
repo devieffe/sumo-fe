@@ -77,11 +77,12 @@ body {
     background-color: var(--color-fg);
     color: var(--color-bg);
     border-radius: 30px;
-    padding: .5em 1.2em;
+    padding: .5em .1em;
     width: 100%;
-    max-width: 160px;
+    max-width: 150px;
     font-weight: 700;
     cursor: pointer;
+    letter-spacing: -.01em;
     background: linear-gradient(to right,  #e5a595 1%,#f9eeb3 21%,#ffffff 50%,#b5e0a8 80%,#95b2ed 100%,#95b2ed 102%); 
   }
 }

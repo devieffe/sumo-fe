@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
+import React, { useState, useCallback } from 'react';
 
 interface SummaryResponse {
   summary: string;
@@ -14,7 +15,7 @@ export default function PersonSummary() {
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => setHydrated(true), []);
+  React.useEffect(() => setHydrated(true), []);
 
   const handleSearch = useCallback(async () => {
     if (!topic.trim()) return;
@@ -30,8 +31,11 @@ export default function PersonSummary() {
       });
 
       const data: SummaryResponse = await res.json();
-      setSummary(data.summary || 'No summary returned.');
-      setPhotoUrl(data.photoUrl ?? null);
+      if (data.error) setSummary(`Error: ${data.error}`);
+      else {
+        setSummary(data.summary || 'No summary returned.');
+        setPhotoUrl(data.photoUrl ?? null);
+      }
     } catch {
       setSummary('Error contacting backend.');
     } finally {
@@ -61,7 +65,7 @@ export default function PersonSummary() {
         <div className="info-container">
           {photoUrl && (
             <figure>
-              <img src={photoUrl} alt="Photo" />
+              <Image src={photoUrl} alt="Photo" width={300} height={300} />
             </figure>
           )}
           <div className="whitespace-pre-wrap">{summary}</div>
