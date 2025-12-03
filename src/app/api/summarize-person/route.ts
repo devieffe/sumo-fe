@@ -9,13 +9,29 @@ const WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 const ERROR_MSG = "No results.";
 const LIMIT_MSG = "Rate limit exceeded. Try again in 2 hours.";
 
+// ---------------- Types ----------------
+interface SerpImage {
+  original: string;
+  original_width?: number;
+  original_height?: number;
+}
+
+interface SerpResult {
+  link: string;
+}
+
+interface WikipediaPage {
+  original?: { source: string };
+  images?: { title: string }[];
+}
+
 // ---------------- Validate query ----------------
 function isValidQuery(q: string) {
   return /^[a-zA-Z\s'.-]+$/.test(q.trim());
 }
 
 // ---------------- Filter portrait images ----------------
-function filterPortraitImages(images: any[]) {
+function filterPortraitImages(images: SerpImage[]): string[] {
   return images
     .filter(img => img.original && /\.(jpe?g|png|webp)$/i.test(img.original))
     .filter(img => {
@@ -28,15 +44,17 @@ function filterPortraitImages(images: any[]) {
 }
 
 // ---------------- Wikipedia portrait ----------------
-async function getWikipediaPortrait(name: string) {
+async function getWikipediaPortrait(name: string): Promise<string | null> {
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(name)}&prop=pageimages|images&format=json&piprop=original`;
+    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+      name
+    )}&prop=pageimages|images&format=json&piprop=original`;
     const res = await fetch(url);
     if (!res.ok) return null;
 
     const data = await res.json();
-    const pages = Object.values(data.query.pages);
-    const page = pages[0] as any;
+    const pages = Object.values(data.query.pages) as WikipediaPage[];
+    const page = pages[0];
 
     // 1️⃣ Try piprop original first
     if (page?.original?.source) return page.original.source;
@@ -46,10 +64,12 @@ async function getWikipediaPortrait(name: string) {
       for (const img of page.images) {
         if (!img.title) continue;
         const ext = img.title.split('.').pop()?.toLowerCase();
-        if (!ext || !['jpg','jpeg','png','webp'].includes(ext)) continue;
+        if (!ext || !['jpg', 'jpeg', 'png', 'webp'].includes(ext)) continue;
 
         // Convert File: to direct URL
-        return `https://en.wikipedia.org/wiki/Special:FilePath/${encodeURIComponent(img.title.replace("File:", ""))}`;
+        return `https://en.wikipedia.org/wiki/Special:FilePath/${encodeURIComponent(
+          img.title.replace('File:', '')
+        )}`;
       }
     }
 
@@ -63,7 +83,8 @@ async function getWikipediaPortrait(name: string) {
 export async function POST(req: Request) {
   try {
     const { topic } = await req.json();
-    if (!topic || !isValidQuery(topic)) return NextResponse.json({ error: "Invalid topic" }, { status: 400 });
+    if (!topic || !isValidQuery(topic))
+      return NextResponse.json({ error: "Invalid topic" }, { status: 400 });
 
     // --- RATE LIMIT ---
     const ip = req.headers.get('x-forwarded-for') || 'local';
@@ -81,7 +102,8 @@ export async function POST(req: Request) {
     if (!serpRes.ok) return NextResponse.json({ error: ERROR_MSG }, { status: 502 });
 
     const serp = await serpRes.json();
-    const links = serp.organic_results?.slice(0, 20).map((x: any) => x.link).filter(Boolean) || [];
+    const links: string[] =
+      serp.organic_results?.slice(0, 20).map((x: SerpResult) => x.link).filter(Boolean) || [];
     const serpImages = filterPortraitImages(serp.images_results || []);
 
     if (!links.length) return NextResponse.json({ error: ERROR_MSG }, { status: 404 });
@@ -104,14 +126,14 @@ ${links.join('\n')}
     const sumRes = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7
+      temperature: 0.7,
     });
 
     let summary = sumRes.choices?.[0]?.message?.content?.trim() || "";
-    if (!summary || summary.includes("UNKNOWN_PERSON")) summary = `No reliable summary found for "${topic}".`;
+    if (!summary || summary.includes("UNKNOWN_PERSON"))
+      summary = `No summary found for "${topic}".`;
 
     return NextResponse.json({ summary, photoUrl });
-
   } catch (err) {
     console.error("API ERROR:", err);
     return NextResponse.json({ error: ERROR_MSG }, { status: 500 });

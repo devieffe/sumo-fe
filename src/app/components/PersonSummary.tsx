@@ -1,5 +1,7 @@
 'use client';
+
 import React, { useState, useCallback } from 'react';
+import Image from 'next/image';
 
 interface SummaryResponse {
   summary: string;
@@ -32,12 +34,10 @@ export default function PersonSummary() {
       const data: SummaryResponse = await res.json();
       if (data.error) setSummary(`Error: ${data.error}`);
       else {
-        setSummary(data.summary || 'No summary available.');
+        setSummary(data.summary || 'No summary returned.');
         setPhotoUrl(data.photoUrl ?? null);
       }
-
-    } catch (err) {
-      console.error("FETCH ERROR:", err);
+    } catch {
       setSummary('Error contacting backend.');
     } finally {
       setLoading(false);
@@ -66,7 +66,13 @@ export default function PersonSummary() {
         <div className="info-container">
           {photoUrl && (
             <figure>
-              <img src={photoUrl} alt="Photo" />
+              <Image
+                src={photoUrl}
+                alt="Photo"
+                width={200}
+                height={200}
+                className="rounded"
+              />
             </figure>
           )}
           <div className="whitespace-pre-wrap">{summary}</div>
